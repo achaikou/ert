@@ -1,0 +1,131 @@
+name: Manual ERT test run
+
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        type: choice
+        description: Tests type to run
+        options:
+        - gui
+        - cli
+        - unit
+        - docs
+        - performance
+        - everest
+        - single
+        - directory
+      test:
+        description: Test to run for "single"
+        required: false
+jobs:
+  tests-something:
+    name: Run ert tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+        submodules: true
+        lfs: true
+
+    - uses: ./.github/actions/install_dependencies_qt
+      with:
+        os: ubuntu-latest
+
+    - uses: actions/setup-python@v6
+      id: setup_python
+      with:
+        python-version: 3.14
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+        python-version: 3.14
+
+    - name: Install ert
+      run: |
+        uv sync --group dev
+
+    - name: GUI Test
+      if: "${{ github.event.inputs.name == 'gui' }}"
+      run: |
+        touch storage
+        chmod 000 storage
+        uv run just ert-gui-tests
+        chmod 700 storage
+        rm storage
+
+    - name: Upload GUI screenshots
+      uses: actions/upload-artifact@v6
+      if: ${{ failure() }}
+      with:
+        name: test-images
+        path: |
+          /tmp/tmp*/**/*.png
+          /tmp/test_docs_screenshots/**/*.png
+
+
+    - name: CLI Test
+      if: "${{ github.event.inputs.name == 'cli' }}"
+      run: |
+        touch storage
+        chmod 000 storage
+        uv run just ert-cli-tests
+        chmod 700 storage
+        rm storage
+
+    - name: Unit Test
+      if: "${{ github.event.inputs.name == 'unit' }}"
+      run: |
+        touch storage
+        chmod 000 storage
+        uv run just ert-unit-tests
+        chmod 700 storage
+        rm storage
+
+    - name: Docs Test
+      if: "${{ github.event.inputs.name == 'docs' }}"
+      run: |
+        touch storage
+        chmod 000 storage
+        ERT_PYTEST_ARGS='-v --durations=25 --benchmark-disable' uv run just ert-doc-tests
+        chmod 700 storage
+        rm storage
+
+    - name: Performance Test
+      if: "${{ github.event.inputs.name == 'performance' }}"
+      run: |
+        touch storage
+        chmod 000 storage
+        ERT_PYTEST_ARGS='-v --durations=25 --benchmark-disable' uv run just ert-memory-tests
+        chmod 700 storage
+        rm storage
+
+    - name: Everest Test
+      if: "${{ github.event.inputs.name == 'everest' }}"
+      run: |
+        uv pip install dash
+        uv pip install everviz
+        ERT_PYTEST_ARGS='-v' uv run just everest-tests
+        uv run pytest --benchmark-disable -s -v --log-cli-level=DEBUG tests/everest/entry_points/test_visualization_entry.py
+
+    - name: Single Test
+      if: "${{ github.event.inputs.name == 'single' }}"
+      run: |
+        touch storage
+        chmod 000 storage
+        uv run pytest -rP -s -v -k ${{ github.event.inputs.test }}
+        chmod 700 storage
+        rm storage
+
+    - name: Directory
+      if: "${{ github.event.inputs.name == 'directory' }}"
+      run: |
+        touch storage
+        chmod 000 storage
+        uv run pytest -rP -vv -s ${{ github.event.inputs.test }}
+        chmod 700 storage
+        rm storage
