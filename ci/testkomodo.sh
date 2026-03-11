@@ -101,7 +101,7 @@ start_tests() {
     elif [ "$CI_SUBSYSTEM_TEST" == "ert-gui-tests" ]; then
       just -f "${CI_SOURCE_ROOT}"/justfile ert-gui-tests
       return $?
-    elif [ "$CI_SUBSYSTEM_TEST" == "ert-single-test-"* ]; then
+    elif [[ "$CI_SUBSYSTEM_TEST" =~ ^ert-single-test- ]]; then
       SINGLE_TEST="${CI_SUBSYSTEM_TEST#ert-single-test-}"
       pytest -rP -s -v -k "$SINGLE_TEST"
       return $?
