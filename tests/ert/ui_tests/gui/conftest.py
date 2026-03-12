@@ -320,26 +320,31 @@ def run_experiment_fixture(request):
         if wait_done or check_realizations:
             qtbot.waitUntil(lambda: gui.findChild(RunDialog) is not None, timeout=10000)
 
-            tmp_img_storage = os.path.join(
-                "/tmp/test_docs_screenshots", "conftest", experiment_mode.name()
-            )
-            os.makedirs(tmp_img_storage, exist_ok=True)
+            upload = kwargs.get("upload_dir", "")
+            if upload:
+                tmp_img_storage = os.path.join(
+                    "/tmp/test_docs_screenshots", "conftest", upload, experiment_mode.name()
+                )
+                os.makedirs(tmp_img_storage, exist_ok=True)
 
-            path = qtbot.screenshot(gui)
-            print("Screenshot of GUI widget saved to:", path)
-            shutil.copy(path, tmp_img_storage)
+            if upload:
+                path = qtbot.screenshot(gui)
+                print("Screenshot of GUI widget saved to:", path)
+                shutil.copy(path, tmp_img_storage)
 
             run_dialog = get_children(gui, RunDialog)[-1]
 
-            path = qtbot.screenshot(gui)
-            print("Screenshot of GUI widget saved to:", path)
-            shutil.copy(path, tmp_img_storage)
+            if upload:
+                path = qtbot.screenshot(gui)
+                print("Screenshot of GUI widget saved to:", path)
+                shutil.copy(path, tmp_img_storage)
 
             qtbot.waitUntil(run_dialog.is_experiment_done, timeout=200000)
 
-            path = qtbot.screenshot(gui)
-            print("Screenshot of GUI widget saved to:", path)
-            shutil.copy(path, tmp_img_storage)
+            if upload:
+                path = qtbot.screenshot(gui)
+                print("Screenshot of GUI widget saved to:", path)
+                shutil.copy(path, tmp_img_storage)
 
             qtbot.waitUntil(lambda: run_dialog._tab_widget.currentWidget() is not None)
 
