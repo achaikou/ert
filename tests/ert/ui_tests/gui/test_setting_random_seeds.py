@@ -50,7 +50,7 @@ def test_that_gui_generates_different_seeds_for_consecutive_runs(
     Path("config.ert").write_text(config_text, encoding="utf-8")
 
     tmp_img_storage = os.path.join(
-        "/tmp/test_docs_screenshots", "conftest", "second_test", experiment_type.name()
+        "/tmp/tmptest/test_docs_screenshots", "conftest", "second_test", experiment_type.name()
     )
     os.makedirs(tmp_img_storage, exist_ok=True)
 

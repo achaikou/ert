@@ -324,7 +324,7 @@ def run_experiment_fixture(request):
             upload = kwargs.get("upload_dir", "")
             if upload:
                 tmp_img_storage = os.path.join(
-                    "/tmp/test_docs_screenshots", "conftest", upload, experiment_mode.name()
+                    "/tmp/tmptest/test_docs_screenshots", "conftest", upload, experiment_mode.name()
                 )
                 os.makedirs(tmp_img_storage, exist_ok=True)
 
