@@ -108,3 +108,5 @@ def test_that_gui_generates_different_seeds_for_consecutive_runs(
 
     seed_logs = [line for line in caplog.text.splitlines() if "'random_seed':" in line]
     assert len(seed_logs) == 2
+
+    assert False #lets see the full log

@@ -342,7 +342,16 @@ def run_experiment_fixture(request):
                 print(f"Screenshot of GUI widget at timestamp {time} saved to: {path}")
                 shutil.copy(path, tmp_img_storage)
 
-            qtbot.waitUntil(run_dialog.is_experiment_done, timeout=200000)
+            try:
+                qtbot.waitUntil(run_dialog.is_experiment_done, timeout=200000)
+            except qtbot.TimeoutError:
+                print("Timeout!!")
+                if upload:
+                    time = datetime.now(UTC).isoformat().replace(":", "-")
+                    path = qtbot.screenshot(gui, suffix=f"{experiment_mode.name()}_{time}")
+                    print(f"Timeout screenshot of GUI widget at timestamp {time} saved to: {path}")
+                    shutil.copy(path, tmp_img_storage)
+                raise
 
             if upload:
                 time = datetime.now(UTC).isoformat().replace(":", "-")
