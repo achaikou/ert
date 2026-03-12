@@ -329,24 +329,24 @@ def run_experiment_fixture(request):
                 os.makedirs(tmp_img_storage, exist_ok=True)
 
             if upload:
-                time = datetime.now(UTC).isoformat()
-                path = qtbot.screenshot(gui, suffix=f"{experiment_mode.name()}_{time}.png")
+                time = datetime.now(UTC).isoformat().replace(":", "-")
+                path = qtbot.screenshot(gui, suffix=f"{experiment_mode.name()}_{time}")
                 print(f"Screenshot of GUI widget at timestamp {time} saved to: {path}")
                 shutil.copy(path, tmp_img_storage)
 
             run_dialog = get_children(gui, RunDialog)[-1]
 
             if upload:
-                time = datetime.now(UTC).isoformat()
-                path = qtbot.screenshot(gui, suffix=f"{experiment_mode.name()}_{time}.png")
+                time = datetime.now(UTC).isoformat().replace(":", "-")
+                path = qtbot.screenshot(gui, suffix=f"{experiment_mode.name()}_{time}")
                 print(f"Screenshot of GUI widget at timestamp {time} saved to: {path}")
                 shutil.copy(path, tmp_img_storage)
 
             qtbot.waitUntil(run_dialog.is_experiment_done, timeout=200000)
 
             if upload:
-                time = datetime.now(UTC).isoformat()
-                path = qtbot.screenshot(gui, suffix=f"{experiment_mode.name()}_{time}.png")
+                time = datetime.now(UTC).isoformat().replace(":", "-")
+                path = qtbot.screenshot(gui, suffix=f"{experiment_mode.name()}_{time}")
                 print(f"Screenshot of GUI widget at timestamp {time} saved to: {path}")
                 shutil.copy(path, tmp_img_storage)
 
