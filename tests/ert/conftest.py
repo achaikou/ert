@@ -11,6 +11,7 @@ from argparse import ArgumentParser
 from importlib.resources import files
 from pathlib import Path
 from textwrap import dedent
+from datetime import datetime, UTC
 
 import polars as pl
 import pytest
@@ -48,7 +49,9 @@ def no_jobs_file_retry(monkeypatch):
 def log_check():
     logger = logging.getLogger()
     logger.setLevel(logging.WARNING)
+    print("Test started at:", datetime.now(UTC).isoformat())
     yield
+    print("Test finished at:", datetime.now(UTC).isoformat())
     logger_after = logging.getLogger()
     level_after = logger_after.getEffectiveLevel()
     assert level_after == logging.WARNING, (

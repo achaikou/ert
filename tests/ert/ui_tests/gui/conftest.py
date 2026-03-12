@@ -11,6 +11,7 @@ from pathlib import Path
 from textwrap import dedent
 from typing import TypeVar
 from unittest.mock import MagicMock, Mock
+from datetime import datetime, UTC
 
 import pytest
 from PyQt6.QtCore import QDir, Qt, QTimer
@@ -328,22 +329,25 @@ def run_experiment_fixture(request):
                 os.makedirs(tmp_img_storage, exist_ok=True)
 
             if upload:
-                path = qtbot.screenshot(gui)
-                print("Screenshot of GUI widget saved to:", path)
+                time = datetime.now(UTC).isoformat()
+                path = qtbot.screenshot(gui, suffix=f"{experiment_mode.name()}_{time}.png")
+                print(f"Screenshot of GUI widget at timestamp {time} saved to: {path}")
                 shutil.copy(path, tmp_img_storage)
 
             run_dialog = get_children(gui, RunDialog)[-1]
 
             if upload:
-                path = qtbot.screenshot(gui)
-                print("Screenshot of GUI widget saved to:", path)
+                time = datetime.now(UTC).isoformat()
+                path = qtbot.screenshot(gui, suffix=f"{experiment_mode.name()}_{time}.png")
+                print(f"Screenshot of GUI widget at timestamp {time} saved to: {path}")
                 shutil.copy(path, tmp_img_storage)
 
             qtbot.waitUntil(run_dialog.is_experiment_done, timeout=200000)
 
             if upload:
-                path = qtbot.screenshot(gui)
-                print("Screenshot of GUI widget saved to:", path)
+                time = datetime.now(UTC).isoformat()
+                path = qtbot.screenshot(gui, suffix=f"{experiment_mode.name()}_{time}.png")
+                print(f"Screenshot of GUI widget at timestamp {time} saved to: {path}")
                 shutil.copy(path, tmp_img_storage)
 
             qtbot.waitUntil(lambda: run_dialog._tab_widget.currentWidget() is not None)

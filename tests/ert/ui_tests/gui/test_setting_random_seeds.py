@@ -3,6 +3,7 @@ import os
 import shutil
 from pathlib import Path
 from textwrap import dedent
+from datetime import datetime, UTC
 
 import pytest
 
@@ -55,28 +56,32 @@ def test_that_gui_generates_different_seeds_for_consecutive_runs(
 
     def wait_for_experiment_completion(gui):
         qtbot.waitUntil(lambda: gui.findChild(RunDialog) is not None, timeout=10000)
-        path = qtbot.screenshot(gui)
-        print("Screenshot of GUI widget saved to:", path)
+        time = datetime.now(UTC).isoformat()
+        path = qtbot.screenshot(gui, suffix=f"{experiment_type.name()}_{time}.png")
+        print(f"Screenshot of GUI widget at timestamp {time} saved to: {path}")
         shutil.copy(path, tmp_img_storage)
 
         run_dialog = get_children(gui, RunDialog)[-1]
-        path = qtbot.screenshot(gui)
-        print("Screenshot of GUI widget saved to:", path)
+        time = datetime.now(UTC).isoformat()
+        path = qtbot.screenshot(gui, suffix=f"{experiment_type.name()}_{time}.png")
+        print(f"Screenshot of GUI widget at timestamp {time} saved to: {path}")
         shutil.copy(path, tmp_img_storage)
 
         qtbot.waitUntil(
             lambda dialog=run_dialog: dialog.is_experiment_done() is True,
             timeout=300000,
         )
-        path = qtbot.screenshot(gui)
-        print("Screenshot of GUI widget saved to:", path)
+        time = datetime.now(UTC).isoformat()
+        path = qtbot.screenshot(gui, suffix=f"{experiment_type.name()}_{time}.png")
+        print(f"Screenshot of GUI widget at timestamp {time} saved to: {path}")
         shutil.copy(path, tmp_img_storage)
 
         qtbot.waitUntil(
             lambda: run_dialog._tab_widget.currentWidget() is not None, timeout=10000
         )
-        path = qtbot.screenshot(gui)
-        print("Screenshot of GUI widget saved to:", path)
+        time = datetime.now(UTC).isoformat()
+        path = qtbot.screenshot(gui, suffix=f"{experiment_type.name()}_{time}.png")
+        print(f"Screenshot of GUI widget at timestamp {time} saved to: {path}")
         shutil.copy(path, tmp_img_storage)
 
     with (
