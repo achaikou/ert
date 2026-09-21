@@ -41,9 +41,11 @@ jobs:
           examples=$(for dir in test-data/ert/*/; do
             name=$(basename "$dir")
             echo "$EXCLUDED_EXAMPLES" | grep -qx "$name" && continue
-            ert_file=$(find "$dir" -maxdepth 1 -name "*.ert" | head -n1)
-            [ -n "$ert_file" ] && echo "$name"
-          done | jq -R -s -c 'split("\n")[:-1]')
+            find "$dir" -maxdepth 1 -name "*.ert" | while read -r ert_file; do
+              config=$(basename "$ert_file")
+              jq -n --arg example "$name" --arg config "$config" '{example: $example, config: $config}'
+            done
+          done | jq -s -c '.')
           echo "examples=$examples" >> "$GITHUB_OUTPUT"
     outputs:
       examples: ${{ steps.find.outputs.examples }}
@@ -53,7 +55,7 @@ jobs:
     strategy:
       matrix:
         ref: [pr, main]
-        example: ${{ fromJson(needs.run-examples.outputs.examples) }}
+        entry: ${{ fromJson(needs.run-examples.outputs.examples) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -67,12 +69,12 @@ jobs:
         run: uv sync --all-groups
 
       - name: Copy example to workdir
-        run: cp -r "test-data/ert/${{ matrix.example }}" /tmp/workdir
+        run: cp -r "test-data/ert/${{ matrix.entry.example }}" /tmp/workdir
 
       - name: Pin NUM_REALIZATIONS and RANDOM_SEED
         working-directory: /tmp/workdir
         run: |
-          ert_file=$(find . -maxdepth 1 -name "*.ert" | head -n1)
+          ert_file="${{ matrix.entry.config }}"
 
           if grep -q "^NUM_REALIZATIONS" "$ert_file"; then
             sed -i "s/^NUM_REALIZATIONS.*/NUM_REALIZATIONS 2/" "$ert_file"
@@ -88,9 +90,7 @@ jobs:
 
       - name: Run ert test_run
         working-directory: /tmp/workdir
-        run: |
-          ert_file=$(find . -maxdepth 1 -name "*.ert" | head -n1)
-          uv run --project "$GITHUB_WORKSPACE" ert test_run "$ert_file"
+        run: uv run --project "$GITHUB_WORKSPACE" ert test_run "${{ matrix.entry.config }}"
 
       - name: Normalize experiment GUID
         working-directory: /tmp/workdir
@@ -117,7 +117,7 @@ jobs:
       - name: Upload storage
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: storage-${{ matrix.ref }}-${{ matrix.example }}
+          name: storage-${{ matrix.ref }}-${{ matrix.entry.example }}-${{ matrix.entry.config }}
           path: /tmp/workdir/storage
           retention-days: 7
 
@@ -125,19 +125,19 @@ jobs:
     needs: [run-examples, run-example]
     strategy:
       matrix:
-        example: ${{ fromJson(needs.run-examples.outputs.examples) }}
+        entry: ${{ fromJson(needs.run-examples.outputs.examples) }}
     runs-on: ubuntu-latest
     steps:
       - name: Download PR storage
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: storage-pr-${{ matrix.example }}
+          name: storage-pr-${{ matrix.entry.example }}-${{ matrix.entry.config }}
           path: /tmp/pr-storage
 
       - name: Download main storage
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: storage-main-${{ matrix.example }}
+          name: storage-main-${{ matrix.entry.example }}-${{ matrix.entry.config }}
           path: /tmp/main-storage
 
       - name: List files
