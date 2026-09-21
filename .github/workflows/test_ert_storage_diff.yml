@@ -1,0 +1,537 @@
+name: Compare ERT storage on branch vs main
+description: Illuminate differences between all example storages on main and on branch, making it easier to notice something has changed.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  EXCLUDED_EXAMPLES: |
+    block_storage
+    eclipse
+    flow_example
+    heat_equation
+    poly_template
+
+  EXCLUDED_CONFIGS: |
+    snake_oil/snake_oil_surface.ert
+
+  EXAMPLES_REQUIRING_FLOW: |
+    flow_example
+    rft_example
+
+  EXCLUDED_STORAGE_PATHS: |
+    **/*.log
+    **/logs/**
+    **/workflow_events.jsonl
+
+jobs:
+  run-examples:
+    strategy:
+      matrix:
+        ref: [pr, main]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ matrix.ref == 'main' && 'main' || github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Sync environment
+        run: uv sync --all-groups
+
+      - name: Find example configs
+        id: find
+        run: |
+          examples=$(for dir in test-data/ert/*/; do
+            name=$(basename "$dir")
+            echo "$EXCLUDED_EXAMPLES" | grep -qx "$name" && continue
+            find "$dir" -maxdepth 1 -name "*.ert" | while read -r ert_file; do
+              config=$(basename "$ert_file")
+              echo "$EXCLUDED_CONFIGS" | grep -qx "$name/$config" && continue
+              jq -n --arg example "$name" --arg config "$config" '{example: $example, config: $config}'
+            done
+          done | jq -s -c '.')
+          echo "examples=$examples" >> "$GITHUB_OUTPUT"
+    outputs:
+      examples: ${{ steps.find.outputs.examples }}
+
+  run-example:
+    needs: run-examples
+    strategy:
+      matrix:
+        ref: [pr, main]
+        entry: ${{ fromJson(needs.run-examples.outputs.examples) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ matrix.ref == 'main' && 'main' || github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Sync environment
+        run: uv sync --all-groups
+
+      - name: Check if flow is required
+        id: flow_check
+        run: |
+          if echo "$EXAMPLES_REQUIRING_FLOW" | grep -qx "${{ matrix.entry.example }}"; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "required=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install flow
+        if: steps.flow_check.outputs.required == 'true'
+        run: |
+          sudo apt install software-properties-common
+          sudo apt-add-repository ppa:opm/ppa
+          sudo apt update
+          sudo apt install mpi-default-bin
+          sudo apt install libopm-simulators-bin python3-opm-common
+
+      - name: Copy example to workdir
+        run: cp -r "test-data/ert/${{ matrix.entry.example }}" /tmp/workdir
+
+      - name: Pin NUM_REALIZATIONS and RANDOM_SEED
+        working-directory: /tmp/workdir
+        run: |
+          ert_file="${{ matrix.entry.config }}"
+
+          if grep -q "^NUM_REALIZATIONS" "$ert_file"; then
+            sed -i "s/^NUM_REALIZATIONS.*/NUM_REALIZATIONS 2/" "$ert_file"
+          else
+            echo "NUM_REALIZATIONS 2" >> "$ert_file"
+          fi
+
+          if grep -q "^RANDOM_SEED" "$ert_file"; then
+            sed -i "s/^RANDOM_SEED.*/RANDOM_SEED 1234/" "$ert_file"
+          else
+            echo "RANDOM_SEED 1234" >> "$ert_file"
+          fi
+
+      - name: Reset ENSPATH and RUNPATH to defaults
+        working-directory: /tmp/workdir
+        run: |
+          ert_file="${{ matrix.entry.config }}"
+          sed -i "/^ENSPATH/d;/^RUNPATH/d" "$ert_file"
+
+      - name: Run ert ensemble_smoother
+        working-directory: /tmp/workdir
+        run: uv run --project "$GITHUB_WORKSPACE" ert ensemble_smoother "${{ matrix.entry.config }}"
+
+      - name: Upload raw main storage
+        if: matrix.ref == 'main'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: raw-storage-main-${{ matrix.entry.example }}-${{ matrix.entry.config }}
+          path: /tmp/workdir/storage
+          retention-days: 7
+
+      - name: Determine normalization mapping
+        working-directory: /tmp/workdir
+        run: |
+          : > /tmp/guid-mapping.txt
+
+          exp_guid=$(find storage/experiments -mindepth 1 -maxdepth 1 -type d | xargs -n1 basename)
+          echo "$exp_guid aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" >> /tmp/guid-mapping.txt
+
+          i=0
+          find storage/ensembles -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
+            | sort -n \
+            | while read -r _ dir; do
+                i=$((i + 1))
+                guid=$(basename "$dir")
+                digit=$(( i % 10 ))
+                block=$(printf "%012d" 0 | tr '0' "$digit")
+                const="${block:0:8}-${block:0:4}-${block:0:4}-${block:0:4}-${block:0:12}"
+                echo "$guid $const" >> /tmp/guid-mapping.txt
+              done
+
+          i=0
+          find storage -type d -name blobs -exec find {} -maxdepth 1 -name '*.blob.json' -printf '%T@ %p\n' \; \
+            | sort -n \
+            | while read -r _ path; do
+                i=$((i + 1))
+                name=$(basename "$path" .blob.json)
+                digit=$(( i % 10 ))
+                const=$(printf "%08d" 0 | tr '0' "$digit")
+                echo "$name $const" >> /tmp/guid-mapping.txt
+              done
+
+      - name: Print normalization mapping
+        run: cat /tmp/guid-mapping.txt
+
+      - name: Apply normalization mapping
+        working-directory: /tmp/workdir
+        run: |
+          while read -r old new; do
+            find storage -depth -name "*$old*" -exec bash -c \
+              'mv "$1" "${1//'"$old"'/'"$new"'}"' _ {} \;
+            grep -rl "$old" storage | xargs -r sed -i "s/$old/$new/g"
+          done < /tmp/guid-mapping.txt
+
+      - name: Normalize timestamps
+        working-directory: /tmp/workdir
+        run: |
+          pattern='[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z?'
+          grep -rlE "$pattern" storage | xargs -r sed -i -E "s/$pattern/2020-01-01T00:00:00.000000Z/g"
+
+      - name: Print logs
+        if: always()
+        working-directory: /tmp/workdir
+        run: |
+          for f in logs/*; do
+            echo "::group::$f"
+            cat "$f"
+            echo "::endgroup::"
+          done
+
+
+      - name: Upload storage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: storage-${{ matrix.ref }}-${{ matrix.entry.example }}-${{ matrix.entry.config }}
+          path: /tmp/workdir/storage
+          retention-days: 7
+
+  compare:
+    needs: [run-examples, run-example]
+    strategy:
+      matrix:
+        entry: ${{ fromJson(needs.run-examples.outputs.examples) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Download PR storage
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: storage-pr-${{ matrix.entry.example }}-${{ matrix.entry.config }}
+          path: /tmp/pr-storage
+
+      - name: Download main storage
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: storage-main-${{ matrix.entry.example }}-${{ matrix.entry.config }}
+          path: /tmp/main-storage
+
+      - name: List files
+        id: list
+        run: |
+          cd /tmp/pr-storage
+          find . -type f | sed 's|^\./||' > /tmp/pr-files-all.txt
+          cd /tmp/main-storage
+          find . -type f | sed 's|^\./||' > /tmp/main-files-all.txt
+          sort -u /tmp/pr-files-all.txt /tmp/main-files-all.txt > /tmp/files-all.txt
+
+          : > /tmp/pr-files.txt
+          : > /tmp/main-files.txt
+          : > /tmp/files.txt
+
+          while read -r f; do
+            excluded=0
+            while read -r pattern; do
+              [ -z "$pattern" ] && continue
+              case "$f" in
+                $pattern) excluded=1 ;;
+              esac
+            done <<< "$EXCLUDED_STORAGE_PATHS"
+            [ "$excluded" -eq 1 ] && continue
+            echo "$f" >> /tmp/files.txt
+          done < /tmp/files-all.txt
+
+          grep -Fxf /tmp/files.txt /tmp/pr-files-all.txt > /tmp/pr-files.txt || true
+          grep -Fxf /tmp/files.txt /tmp/main-files-all.txt > /tmp/main-files.txt || true
+
+      - name: Start report
+        run: |
+          : > /tmp/report.md
+          echo "<details><summary>Details</summary>" >> /tmp/report.md
+          echo "" >> /tmp/report.md
+
+      - name: Report missing files
+        run: |
+          echo "### Missing files" >> /tmp/report.md
+          while read -r f; do
+            in_pr=$(grep -qx "$f" /tmp/pr-files.txt && echo yes || echo no)
+            in_main=$(grep -qx "$f" /tmp/main-files.txt && echo yes || echo no)
+            if [ "$in_pr" = "no" ]; then
+              echo "- $f (missing from PR run)" >> /tmp/report.md
+              echo "fail" >> /tmp/example-status.txt
+            elif [ "$in_main" = "no" ]; then
+              echo "- $f (missing from main run)" >> /tmp/report.md
+              echo "fail" >> /tmp/example-status.txt
+            fi
+          done < /tmp/files.txt
+          echo "" >> /tmp/report.md
+
+      - name: Report failed files
+        run: |
+          echo "### Failed files" >> /tmp/report.md
+          while read -r f; do
+            grep -qx "$f" /tmp/pr-files.txt || continue
+            grep -qx "$f" /tmp/main-files.txt || continue
+            diff -q "/tmp/pr-storage/$f" "/tmp/main-storage/$f" > /dev/null 2>&1 && continue
+
+            if uv run --with polars python "$GITHUB_WORKSPACE/.github/scripts/compare_storage_file.py" \
+              "/tmp/pr-storage/$f" "/tmp/main-storage/$f"; then
+              continue
+            fi
+
+            echo "fail" >> /tmp/example-status.txt
+            {
+              echo "<details><summary>$f</summary>"
+              echo ""
+              echo '```diff'
+              diff -ru "/tmp/main-storage/$f" "/tmp/pr-storage/$f" || true
+              echo '```'
+              echo "</details>"
+            } >> /tmp/report.md
+          done < /tmp/files.txt
+          echo "" >> /tmp/report.md
+
+      - name: Report passed files
+        run: |
+          echo "### Passed files" >> /tmp/report.md
+          while read -r f; do
+            grep -qx "$f" /tmp/pr-files.txt || continue
+            grep -qx "$f" /tmp/main-files.txt || continue
+            diff -q "/tmp/pr-storage/$f" "/tmp/main-storage/$f" > /dev/null 2>&1 && \
+              { echo "- $f" >> /tmp/report.md; continue; }
+
+            uv run --with polars python "$GITHUB_WORKSPACE/.github/scripts/compare_storage_file.py" \
+              "/tmp/pr-storage/$f" "/tmp/main-storage/$f" && echo "- $f (float-tolerant match)" >> /tmp/report.md
+          done < /tmp/files.txt
+          echo "</details>" >> /tmp/report.md
+
+      - name: Determine example status
+        if: always()
+        run: |
+          mkdir -p /tmp/compare-result
+          if [ -s /tmp/example-status.txt ]; then
+            echo "fail" > /tmp/compare-result/status.txt
+          else
+            echo "pass" > /tmp/compare-result/status.txt
+          fi
+          cp /tmp/report.md /tmp/compare-result/report.md 2>/dev/null || echo "Report generation failed" > /tmp/compare-result/report.md
+
+      - name: Upload compare result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: compare-result-${{ matrix.entry.example }}-${{ matrix.entry.config }}
+          path: /tmp/compare-result
+          retention-days: 7
+
+  check-storage-backward-compatibility:
+    needs: [run-examples, run-example]
+    strategy:
+      matrix:
+        entry: ${{ fromJson(needs.run-examples.outputs.examples) }}
+      fail-fast: false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Sync environment
+        run: uv sync --all-groups
+
+      - name: Check if flow is required
+        id: flow_check
+        run: |
+          if echo "$EXAMPLES_REQUIRING_FLOW" | grep -qx "${{ matrix.entry.example }}"; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "required=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install flow
+        if: steps.flow_check.outputs.required == 'true'
+        run: |
+          sudo apt install software-properties-common
+          sudo apt-add-repository ppa:opm/ppa
+          sudo apt update
+          sudo apt install mpi-default-bin
+          sudo apt install libopm-simulators-bin python3-opm-common
+
+      - name: Copy example to workdir
+        run: cp -r "test-data/ert/${{ matrix.entry.example }}" /tmp/workdir
+
+      - name: Pin NUM_REALIZATIONS and RANDOM_SEED
+        working-directory: /tmp/workdir
+        run: |
+          ert_file="${{ matrix.entry.config }}"
+
+          if grep -q "^NUM_REALIZATIONS" "$ert_file"; then
+            sed -i "s/^NUM_REALIZATIONS.*/NUM_REALIZATIONS 2/" "$ert_file"
+          else
+            echo "NUM_REALIZATIONS 2" >> "$ert_file"
+          fi
+
+          if grep -q "^RANDOM_SEED" "$ert_file"; then
+            sed -i "s/^RANDOM_SEED.*/RANDOM_SEED 1234/" "$ert_file"
+          else
+            echo "RANDOM_SEED 1234" >> "$ert_file"
+          fi
+
+      - name: Reset ENSPATH and RUNPATH to defaults
+        working-directory: /tmp/workdir
+        run: |
+          ert_file="${{ matrix.entry.config }}"
+          sed -i "/^ENSPATH/d;/^RUNPATH/d" "$ert_file"
+
+      - name: Download raw main storage
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: raw-storage-main-${{ matrix.entry.example }}-${{ matrix.entry.config }}
+          path: /tmp/workdir/storage
+
+      - name: Determine prior ensemble id
+        id: prior_ensemble
+        working-directory: /tmp/workdir
+        run: |
+          prior_id=$(for index_file in storage/ensembles/*/index.json; do
+            iteration=$(jq -r '.iteration' "$index_file")
+            if [ "$iteration" = "0" ]; then
+              jq -r '.id' "$index_file"
+              break
+            fi
+          done)
+          echo "id=$prior_id" >> "$GITHUB_OUTPUT"
+
+      - name: Run ert es_mda on main storage with PR code
+        id: run_ert
+        continue-on-error: true
+        working-directory: /tmp/workdir
+        run: |
+          uv run --project "$GITHUB_WORKSPACE" ert es_mda \
+            --prior-ensemble-id "${{ steps.prior_ensemble.outputs.id }}" \
+            --weights 1 \
+            "${{ matrix.entry.config }}"
+
+      - name: Print storage tree
+        if: always()
+        working-directory: /tmp/workdir
+        run: find storage | sort
+
+      - name: Print logs
+        if: always()
+        working-directory: /tmp/workdir
+        run: |
+          for f in logs/*; do
+            echo "::group::$f"
+            cat "$f"
+            echo "::endgroup::"
+          done
+
+      - name: Write compatibility status
+        if: always()
+        run: |
+          mkdir -p /tmp/compat-result
+          echo "${{ steps.run_ert.outcome }}" > /tmp/compat-result/status.txt
+
+      - name: Upload compatibility status
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: compat-status-${{ matrix.entry.example }}-${{ matrix.entry.config }}
+          path: /tmp/compat-result/status.txt
+          retention-days: 7
+
+  report:
+    needs: [run-examples, compare, check-storage-backward-compatibility]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download compare results
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: compare-result-*
+          path: /tmp/compare-results
+          merge-multiple: false
+        continue-on-error: true
+
+      - name: Download compatibility statuses
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: compat-status-*
+          path: /tmp/compat-statuses
+          merge-multiple: false
+        continue-on-error: true
+
+      - name: Build report
+        env:
+          EXAMPLES_JSON: ${{ needs.run-examples.outputs.examples }}
+        run: |
+          overall_status="pass"
+          : > /tmp/final-report.md
+
+          while read -r entry; do
+            example=$(echo "$entry" | jq -r '.example')
+            config=$(echo "$entry" | jq -r '.config')
+
+            compat_file="/tmp/compat-statuses/compat-status-$example-$config/status.txt"
+            compare_file="/tmp/compare-results/compare-result-$example-$config/status.txt"
+            report_file="/tmp/compare-results/compare-result-$example-$config/report.md"
+
+            compat_status=$(cat "$compat_file" 2>/dev/null || echo "missing")
+            compare_status=$(cat "$compare_file" 2>/dev/null || echo "missing")
+
+            if [ "$compat_status" = "success" ]; then
+              compat_line="✅ Old storage opens on the branch"
+            elif [ "$compat_status" = "missing" ]; then
+              compat_line="❓ Compatibility check did not report a result"
+              overall_status="fail"
+            else
+              compat_line="❌ Old storage failed to open on the branch"
+              overall_status="fail"
+            fi
+
+            if [ "$compare_status" = "pass" ]; then
+              example_emoji="✅"
+            elif [ "$compare_status" = "missing" ]; then
+              example_emoji="❓"
+              overall_status="fail"
+            else
+              example_emoji="⚠️"
+              overall_status="fail"
+            fi
+
+            {
+              echo "## $example_emoji $example ($config)"
+              echo ""
+              echo "$compat_line"
+              echo ""
+              if [ -f "$report_file" ]; then
+                cat "$report_file"
+              else
+                echo "_No comparison report available._"
+              fi
+              echo ""
+            } >> /tmp/final-report.md
+          done < <(echo "$EXAMPLES_JSON" | jq -c '.[]')
+
+          if [ "$overall_status" = "pass" ]; then
+            header="# ✅ No storage changes"
+          else
+            header=$(printf '%s\n\n%s\n%s' \
+              "# ⚠️ Storage changes observed" \
+              "- If storage changes were not intended, consider reverting them." \
+              "- If storage changes were intended, make sure they will not affect users or add a new storage migration.")
+          fi
+
+          { echo "$header"; echo ""; cat /tmp/final-report.md; } > /tmp/summary.md
+          cat /tmp/summary.md >> "$GITHUB_STEP_SUMMARY"
