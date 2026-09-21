@@ -51,6 +51,7 @@ class PolygonShapeConfig(ShapeConfig):
 
     type: Literal["polygon"] = "polygon"
     wkt: str  # Well-Known Text representation of the multipolygon
+    second: str | None = None
 
     TOLERANCE: ClassVar[float] = 0.1
 
@@ -95,7 +96,7 @@ class PolygonShapeConfig(ShapeConfig):
             shapely.MultiPolygon, shapely.MultiPolygon(cleaned_polygons).normalize()
         )
 
-        return cls(wkt=shapely.force_2d(multipolygon).wkt)
+        return cls(wkt=shapely.force_2d(multipolygon).wkt, second="test")
 
     @cached_property
     def _polygon(self) -> shapely.MultiPolygon:
