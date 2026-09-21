@@ -1,0 +1,160 @@
+name: Compare ERT storage on branch vs main
+description: Illuminate differences between all example storages on main and on branch, making it easier to notice something has changed.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  EXCLUDED_EXAMPLES: |
+    block_storage
+    eclipse
+    flow_example
+    heat_equation
+    poly_template
+    rft_example
+    seismic_example
+    snake_oil
+  EXCLUDED_STORAGE_PATHS: |
+    **/*.log
+    **/logs/**
+
+jobs:
+  run-examples:
+    strategy:
+      matrix:
+        ref: [pr, main]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref == 'main' && 'main' || github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Sync environment
+        run: uv sync --all-groups
+
+      - name: Find example configs
+        id: find
+        run: |
+          examples=$(for dir in test-data/ert/*/; do
+            name=$(basename "$dir")
+            echo "$EXCLUDED_EXAMPLES" | grep -qx "$name" && continue
+            ert_file=$(find "$dir" -maxdepth 1 -name "*.ert" | head -n1)
+            [ -n "$ert_file" ] && echo "$name"
+          done | jq -R -s -c 'split("\n")[:-1]')
+          echo "examples=$examples" >> "$GITHUB_OUTPUT"
+    outputs:
+      examples: ${{ steps.find.outputs.examples }}
+
+  run-example:
+    needs: run-examples
+    strategy:
+      matrix:
+        ref: [pr, main]
+        example: ${{ fromJson(needs.run-examples.outputs.examples) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref == 'main' && 'main' || github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Sync environment
+        run: uv sync --all-groups
+
+      - name: Copy example to workdir
+        run: cp -r "test-data/ert/${{ matrix.example }}" /tmp/workdir
+
+      - name: Run ert test_run
+        working-directory: /tmp/workdir
+        run: |
+          ert_file=$(find . -maxdepth 1 -name "*.ert" | head -n1)
+          uv run --project "$GITHUB_WORKSPACE" ert test_run "$ert_file"
+
+      - name: Normalize experiment GUID
+        working-directory: /tmp/workdir
+        run: |
+          exp_guid=$(find storage/experiments -mindepth 1 -maxdepth 1 -type d | xargs -n1 basename)
+          find storage -depth -name "*$exp_guid*" -exec bash -c \
+            'mv "$1" "${1//'"$exp_guid"'/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa}"' _ {} \;
+          grep -rl "$exp_guid" storage | xargs sed -i "s/$exp_guid/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/g"
+
+      - name: Normalize ensemble GUID
+        working-directory: /tmp/workdir
+        run: |
+          ens_guid=$(find storage/ensembles -mindepth 1 -maxdepth 1 -type d | xargs -n1 basename)
+          find storage -depth -name "*$ens_guid*" -exec bash -c \
+            'mv "$1" "${1//'"$ens_guid"'/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb}"' _ {} \;
+          grep -rl "$ens_guid" storage | xargs sed -i "s/$ens_guid/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/g"
+
+      - name: Upload storage
+        uses: actions/upload-artifact@v4
+        with:
+          name: storage-${{ matrix.ref }}-${{ matrix.example }}
+          path: /tmp/workdir/storage
+          retention-days: 7
+
+  compare:
+    needs: [run-examples, run-example]
+    strategy:
+      matrix:
+        example: ${{ fromJson(needs.run-examples.outputs.examples) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download PR storage
+        uses: actions/download-artifact@v4
+        with:
+          name: storage-pr-${{ matrix.example }}
+          path: /tmp/pr-storage
+
+      - name: Download main storage
+        uses: actions/download-artifact@v4
+        with:
+          name: storage-main-${{ matrix.example }}
+          path: /tmp/main-storage
+
+      - name: List files
+        id: list
+        run: |
+          cd /tmp/pr-storage
+          find . -type f | sed 's|^\./||' > /tmp/files.txt
+          echo "count=$(wc -l < /tmp/files.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Diff each file and build report
+        run: |
+          echo "## ${{ matrix.example }}" > /tmp/report.md
+          echo "" >> /tmp/report.md
+          echo "<details><summary>Details</summary>" >> /tmp/report.md
+          echo "" >> /tmp/report.md
+          echo "### Failed files" >> /tmp/report.md
+
+          while read -r f; do
+            if ! diff -q "/tmp/pr-storage/$f" "/tmp/main-storage/$f" > /dev/null 2>&1; then
+              {
+                echo "<details><summary>$f</summary>"
+                echo ""
+                echo '```diff'
+                diff -ru "/tmp/main-storage/$f" "/tmp/pr-storage/$f"
+                echo '```'
+                echo "</details>"
+              } >> /tmp/report.md
+            fi
+          done < /tmp/files.txt
+
+          echo "" >> /tmp/report.md
+          echo "### Passed files" >> /tmp/report.md
+          while read -r f; do
+            if diff -q "/tmp/pr-storage/$f" "/tmp/main-storage/$f" > /dev/null 2>&1; then
+              echo "- $f" >> /tmp/report.md
+            fi
+          done < /tmp/files.txt
+
+          echo "</details>" >> /tmp/report.md
+
+      - name: Add report to summary
+        run: cat /tmp/report.md >> "$GITHUB_STEP_SUMMARY"
