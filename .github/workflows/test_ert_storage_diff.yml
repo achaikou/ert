@@ -26,12 +26,12 @@ jobs:
         ref: [pr, main]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ matrix.ref == 'main' && 'main' || github.event.pull_request.head.sha || github.sha }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Sync environment
         run: uv sync --all-groups
@@ -57,12 +57,12 @@ jobs:
         example: ${{ fromJson(needs.run-examples.outputs.examples) }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ matrix.ref == 'main' && 'main' || github.event.pull_request.head.sha || github.sha }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Sync environment
         run: uv sync --all-groups
@@ -93,7 +93,7 @@ jobs:
           grep -rl "$ens_guid" storage | xargs sed -i "s/$ens_guid/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/g"
 
       - name: Upload storage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: storage-${{ matrix.ref }}-${{ matrix.example }}
           path: /tmp/workdir/storage
@@ -107,13 +107,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download PR storage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: storage-pr-${{ matrix.example }}
           path: /tmp/pr-storage
 
       - name: Download main storage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: storage-main-${{ matrix.example }}
           path: /tmp/main-storage
@@ -122,38 +122,59 @@ jobs:
         id: list
         run: |
           cd /tmp/pr-storage
-          find . -type f | sed 's|^\./||' > /tmp/files.txt
-          echo "count=$(wc -l < /tmp/files.txt)" >> "$GITHUB_OUTPUT"
+          find . -type f | sed 's|^\./||' > /tmp/pr-files.txt
+          cd /tmp/main-storage
+          find . -type f | sed 's|^\./||' > /tmp/main-files.txt
+          sort -u /tmp/pr-files.txt /tmp/main-files.txt > /tmp/files.txt
 
-      - name: Diff each file and build report
+      - name: Start report
         run: |
           echo "## ${{ matrix.example }}" > /tmp/report.md
           echo "" >> /tmp/report.md
           echo "<details><summary>Details</summary>" >> /tmp/report.md
           echo "" >> /tmp/report.md
-          echo "### Failed files" >> /tmp/report.md
 
+      - name: Report missing files
+        run: |
+          echo "### Missing files" >> /tmp/report.md
           while read -r f; do
-            if ! diff -q "/tmp/pr-storage/$f" "/tmp/main-storage/$f" > /dev/null 2>&1; then
-              {
-                echo "<details><summary>$f</summary>"
-                echo ""
-                echo '```diff'
-                diff -ru "/tmp/main-storage/$f" "/tmp/pr-storage/$f"
-                echo '```'
-                echo "</details>"
-              } >> /tmp/report.md
+            in_pr=$(grep -qx "$f" /tmp/pr-files.txt && echo yes || echo no)
+            in_main=$(grep -qx "$f" /tmp/main-files.txt && echo yes || echo no)
+            if [ "$in_pr" = "no" ]; then
+              echo "- $f (missing from PR run)" >> /tmp/report.md
+            elif [ "$in_main" = "no" ]; then
+              echo "- $f (missing from main run)" >> /tmp/report.md
             fi
           done < /tmp/files.txt
-
           echo "" >> /tmp/report.md
+
+      - name: Report failed files
+        run: |
+          echo "### Failed files" >> /tmp/report.md
+          while read -r f; do
+            grep -qx "$f" /tmp/pr-files.txt || continue
+            grep -qx "$f" /tmp/main-files.txt || continue
+            diff -q "/tmp/pr-storage/$f" "/tmp/main-storage/$f" > /dev/null 2>&1 && continue
+            {
+              echo "<details><summary>$f</summary>"
+              echo ""
+              echo '```diff'
+              diff -ru "/tmp/main-storage/$f" "/tmp/pr-storage/$f" || true
+              echo '```'
+              echo "</details>"
+            } >> /tmp/report.md
+          done < /tmp/files.txt
+          echo "" >> /tmp/report.md
+
+      - name: Report passed files
+        run: |
           echo "### Passed files" >> /tmp/report.md
           while read -r f; do
-            if diff -q "/tmp/pr-storage/$f" "/tmp/main-storage/$f" > /dev/null 2>&1; then
-              echo "- $f" >> /tmp/report.md
-            fi
+            grep -qx "$f" /tmp/pr-files.txt || continue
+            grep -qx "$f" /tmp/main-files.txt || continue
+            diff -q "/tmp/pr-storage/$f" "/tmp/main-storage/$f" > /dev/null 2>&1 || continue
+            echo "- $f" >> /tmp/report.md
           done < /tmp/files.txt
-
           echo "</details>" >> /tmp/report.md
 
       - name: Add report to summary
