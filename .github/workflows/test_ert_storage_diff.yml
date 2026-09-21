@@ -88,9 +88,9 @@ jobs:
             echo "RANDOM_SEED 1234" >> "$ert_file"
           fi
 
-      - name: Run ert test_run
+      - name: Run ert ensemble_smoother
         working-directory: /tmp/workdir
-        run: uv run --project "$GITHUB_WORKSPACE" ert test_run "${{ matrix.entry.config }}"
+        run: uv run --project "$GITHUB_WORKSPACE" ert ensemble_smoother "${{ matrix.entry.config }}"
 
       - name: Normalize experiment GUID
         working-directory: /tmp/workdir
