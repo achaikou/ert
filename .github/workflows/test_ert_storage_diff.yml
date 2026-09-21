@@ -13,7 +13,6 @@ env:
     heat_equation
     poly_template
     rft_example
-    seismic_example
     snake_oil
   EXCLUDED_STORAGE_PATHS: |
     **/*.log
