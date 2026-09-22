@@ -103,9 +103,15 @@ jobs:
       - name: Normalize ensemble GUIDs
         working-directory: /tmp/workdir
         run: |
-          i=0
           find storage/ensembles -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
             | sort -n \
+            | tee /tmp/ensemble-times.txt
+
+          echo "---"
+          cat /tmp/ensemble-times.txt
+
+          i=0
+          sort -n /tmp/ensemble-times.txt \
             | while read -r _ dir; do
                 i=$((i + 1))
                 guid=$(basename "$dir")
