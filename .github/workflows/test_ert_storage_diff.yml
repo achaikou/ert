@@ -37,6 +37,18 @@ jobs:
       - name: Sync environment
         run: uv sync --all-groups
 
+      - name: Install flow
+        run: |
+          set -e
+          sudo apt install software-properties-common
+          sudo apt-add-repository ppa:opm/ppa
+          sudo apt update
+          sudo apt install mpi-default-bin
+          sudo apt install libopm-simulators-bin python3-opm-common
+
+          which flow
+          flow --version
+
       - name: Find example configs
         id: find
         run: |
