@@ -125,47 +125,26 @@ jobs:
         working-directory: /tmp/workdir
         run: uv run --project "$GITHUB_WORKSPACE" ert ensemble_smoother "${{ matrix.entry.config }}"
 
-      - name: Normalize experiment GUID
+      - name: Determine normalization mapping
         working-directory: /tmp/workdir
         run: |
+          : > /tmp/guid-mapping.txt
+
           exp_guid=$(find storage/experiments -mindepth 1 -maxdepth 1 -type d | xargs -n1 basename)
-          find storage -depth -name "*$exp_guid*" -exec bash -c \
-            'mv "$1" "${1//'"$exp_guid"'/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa}"' _ {} \;
-          grep -rl "$exp_guid" storage | xargs sed -i "s/$exp_guid/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/g"
-
-      - name: Normalize ensemble GUIDs
-        working-directory: /tmp/workdir
-        run: |
-          find storage/ensembles -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
-            | sort -n \
-            | tee /tmp/ensemble-times.txt
-
-          echo "---"
-          cat /tmp/ensemble-times.txt
-
-          echo "--- index.json contents ---"
-          while read -r mtime dir; do
-            echo "mtime=$mtime dir=$dir"
-            cat "$dir/index.json"
-            echo ""
-          done < /tmp/ensemble-times.txt
+          echo "$exp_guid aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" >> /tmp/guid-mapping.txt
 
           i=0
-          sort -n /tmp/ensemble-times.txt \
+          find storage/ensembles -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
+            | sort -n \
             | while read -r _ dir; do
                 i=$((i + 1))
                 guid=$(basename "$dir")
                 digit=$(( i % 10 ))
                 block=$(printf "%012d" 0 | tr '0' "$digit")
                 const="${block:0:8}-${block:0:4}-${block:0:4}-${block:0:4}-${block:0:12}"
-                find storage -depth -name "*$guid*" -exec bash -c \
-                  'mv "$1" "${1//'"$guid"'/'"$const"'}"' _ {} \;
-                grep -rl "$guid" storage | xargs -r sed -i "s/$guid/$const/g"
+                echo "$guid $const" >> /tmp/guid-mapping.txt
               done
 
-      - name: Normalize blob names
-        working-directory: /tmp/workdir
-        run: |
           i=0
           find storage -type d -name blobs -exec find {} -maxdepth 1 -name '*.blob.json' -printf '%T@ %p\n' \; \
             | sort -n \
@@ -174,10 +153,17 @@ jobs:
                 name=$(basename "$path" .blob.json)
                 digit=$(( i % 10 ))
                 const=$(printf "%08d" 0 | tr '0' "$digit")
-                find storage -depth -name "*$name*" -exec bash -c \
-                  'mv "$1" "${1//'"$name"'/'"$const"'}"' _ {} \;
-                grep -rl "$name" storage | xargs -r sed -i "s/$name/$const/g"
+                echo "$name $const" >> /tmp/guid-mapping.txt
               done
+
+      - name: Apply normalization mapping
+        working-directory: /tmp/workdir
+        run: |
+          while read -r old new; do
+            find storage -depth -name "*$old*" -exec bash -c \
+              'mv "$1" "${1//'"$old"'/'"$new"'}"' _ {} \;
+            grep -rl "$old" storage | xargs -r sed -i "s/$old/$new/g"
+          done < /tmp/guid-mapping.txt
 
       - name: Normalize timestamps
         working-directory: /tmp/workdir
