@@ -16,9 +16,9 @@ from ert.analysis.event import (
     AnalysisEvent,
     AnalysisStatusEvent,
 )
+import numpy as np
 
 if TYPE_CHECKING:
-    import numpy as np
     import numpy.typing as npt
 
     from ert.config import ParameterConfig
@@ -125,6 +125,7 @@ class GlobalESUpdate:
             raise RuntimeError("prepare() must be called before update()")
 
         num_params = param_ensemble.shape[0]
+        np.set_printoptions(precision=20, suppress=False, linewidth=200)
         logger.info(f"GlobalESUpdate.update: param_ensemble shape={param_ensemble.shape}, non_zero_variance_count={non_zero_variance_mask.sum()}")
         logger.info(f"DEBUG param_ensemble before update:\n{param_ensemble}")
         self._progress_callback(
