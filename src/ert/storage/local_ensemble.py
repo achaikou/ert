@@ -670,6 +670,7 @@ class LocalEnsemble(BaseMode):
         param_group: str,
         iens_active_index: npt.NDArray[np.int_],
     ) -> None:
+        np.set_printoptions(precision=20, suppress=False, linewidth=200)
         logger.info(f"DEBUG save_parameters_numpy input array for {param_group}:\n{parameters}")
         logger.info(f"DEBUG save_parameters_numpy iens_active_index:\n{iens_active_index}")
 

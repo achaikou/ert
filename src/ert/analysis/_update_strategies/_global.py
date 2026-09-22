@@ -1,6 +1,7 @@
 """Global ES update strategy without localization."""
 
 from __future__ import annotations
+import logging
 
 import time
 from collections.abc import Callable
@@ -23,6 +24,8 @@ if TYPE_CHECKING:
     from ert.config import ParameterConfig
 
     from ._protocol import ObservationContext
+
+logger = logging.getLogger(__name__)
 
 
 class GlobalESUpdate:
@@ -122,6 +125,8 @@ class GlobalESUpdate:
             raise RuntimeError("prepare() must be called before update()")
 
         num_params = param_ensemble.shape[0]
+        logger.info(f"GlobalESUpdate.update: param_ensemble shape={param_ensemble.shape}, non_zero_variance_count={non_zero_variance_mask.sum()}")
+        logger.info(f"DEBUG param_ensemble before update:\n{param_ensemble}")
         self._progress_callback(
             AnalysisStatusEvent(
                 msg=f"Updating {param_config.name} ({param_config.type.upper()}) "
@@ -138,6 +143,7 @@ class GlobalESUpdate:
         param_ensemble[non_zero_variance_mask] = self._smoother.assimilate_batch(
             X=X, overwrite=True
         )
+        logger.info(f"DEBUG param_ensemble after update:\n{param_ensemble}")
 
         elapsed = time.perf_counter() - start_time
 
