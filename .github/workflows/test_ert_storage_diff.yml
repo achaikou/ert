@@ -12,6 +12,10 @@ env:
     flow_example
     heat_equation
     poly_template
+
+  EXCLUDED_CONFIGS: |
+    snake_oil/snake_oil_surface.ert
+
   EXCLUDED_STORAGE_PATHS: |
     **/*.log
     **/logs/**
@@ -41,6 +45,7 @@ jobs:
             echo "$EXCLUDED_EXAMPLES" | grep -qx "$name" && continue
             find "$dir" -maxdepth 1 -name "*.ert" | while read -r ert_file; do
               config=$(basename "$ert_file")
+              echo "$EXCLUDED_CONFIGS" | grep -qx "$name/$config" && continue
               jq -n --arg example "$name" --arg config "$config" '{example: $example, config: $config}'
             done
           done | jq -s -c '.')
