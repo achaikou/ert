@@ -117,6 +117,22 @@ jobs:
                 grep -rl "$guid" storage | xargs -r sed -i "s/$guid/$const/g"
               done
 
+      - name: Normalize blob names
+        working-directory: /tmp/workdir
+        run: |
+          i=0
+          find storage -type d -name blobs -exec find {} -maxdepth 1 -name '*.blob.json' -printf '%T@ %p\n' \; \
+            | sort -n \
+            | while read -r _ path; do
+                i=$((i + 1))
+                name=$(basename "$path" .blob.json)
+                digit=$(( i % 10 ))
+                const=$(printf "%08d" 0 | tr '0' "$digit")
+                find storage -depth -name "*$name*" -exec bash -c \
+                  'mv "$1" "${1//'"$name"'/'"$const"'}"' _ {} \;
+                grep -rl "$name" storage | xargs -r sed -i "s/$name/$const/g"
+              done
+
       - name: Normalize timestamps
         working-directory: /tmp/workdir
         run: |
