@@ -12,8 +12,6 @@ env:
     flow_example
     heat_equation
     poly_template
-    rft_example
-    snake_oil
   EXCLUDED_STORAGE_PATHS: |
     **/*.log
     **/logs/**
