@@ -12,6 +12,8 @@ env:
     flow_example
     heat_equation
     poly_template
+    rft_example
+    snake_oil
 
   EXCLUDED_CONFIGS: |
     snake_oil/snake_oil_surface.ert
@@ -140,6 +142,13 @@ jobs:
 
           echo "---"
           cat /tmp/ensemble-times.txt
+
+          echo "--- index.json contents ---"
+          while read -r mtime dir; do
+            echo "mtime=$mtime dir=$dir"
+            cat "$dir/index.json"
+            echo ""
+          done < /tmp/ensemble-times.txt
 
           i=0
           sort -n /tmp/ensemble-times.txt \
