@@ -670,6 +670,9 @@ class LocalEnsemble(BaseMode):
         param_group: str,
         iens_active_index: npt.NDArray[np.int_],
     ) -> None:
+        logger.info(f"DEBUG save_parameters_numpy input array for {param_group}:\n{parameters}")
+        logger.info(f"DEBUG save_parameters_numpy iens_active_index:\n{iens_active_index}")
+
         config_node = self.experiment.parameter_configuration[param_group]
         complete_df: pl.DataFrame | None = None
         with contextlib.suppress(KeyError):
@@ -679,6 +682,7 @@ class LocalEnsemble(BaseMode):
         for real, ds in config_node.create_storage_datasets(
             parameters, iens_active_index
         ):
+            logger.info(f"DEBUG save_parameters_numpy create_storage_datasets output for realization {real}:\n{ds if isinstance(ds, pl.DataFrame) else ds['values'].values}")
             if isinstance(ds, pl.DataFrame):
                 if complete_df is None:
                     complete_df = ds
@@ -695,6 +699,8 @@ class LocalEnsemble(BaseMode):
                 self.save_parameters(ds, config_node.name, real)
 
         group_path = self.mount_point / f"{_escape_filename(SCALAR_FILENAME)}.parquet"
+        with pl.Config(tbl_cols=-1, tbl_rows=-1, fmt_str_lengths=1000, tbl_width_chars=1000):
+            logger.info(f"DEBUG save_parameters final (before write):\n{complete_df if complete_df is not None else 'None'}")
         if complete_df is not None:
             self._storage._to_parquet_transaction(group_path, complete_df)
 
