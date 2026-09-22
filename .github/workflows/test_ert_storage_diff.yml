@@ -108,6 +108,7 @@ jobs:
             | sort -n \
             | while read -r _ dir; do
                 i=$((i + 1))
+                guid=$(basename "$dir")
                 digit=$(( i % 10 ))
                 block=$(printf "%012d" 0 | tr '0' "$digit")
                 const="${block:0:8}-${block:0:4}-${block:0:4}-${block:0:4}-${block:0:12}"
