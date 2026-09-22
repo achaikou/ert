@@ -100,13 +100,21 @@ jobs:
             'mv "$1" "${1//'"$exp_guid"'/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa}"' _ {} \;
           grep -rl "$exp_guid" storage | xargs sed -i "s/$exp_guid/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/g"
 
-      - name: Normalize ensemble GUID
+      - name: Normalize ensemble GUIDs
         working-directory: /tmp/workdir
         run: |
-          ens_guid=$(find storage/ensembles -mindepth 1 -maxdepth 1 -type d | xargs -n1 basename)
-          find storage -depth -name "*$ens_guid*" -exec bash -c \
-            'mv "$1" "${1//'"$ens_guid"'/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb}"' _ {} \;
-          grep -rl "$ens_guid" storage | xargs sed -i "s/$ens_guid/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/g"
+          i=0
+          find storage/ensembles -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
+            | sort -n \
+            | while read -r _ dir; do
+                i=$((i + 1))
+                digit=$(( i % 10 ))
+                block=$(printf "%012d" 0 | tr '0' "$digit")
+                const="${block:0:8}-${block:0:4}-${block:0:4}-${block:0:4}-${block:0:12}"
+                find storage -depth -name "*$guid*" -exec bash -c \
+                  'mv "$1" "${1//'"$guid"'/'"$const"'}"' _ {} \;
+                grep -rl "$guid" storage | xargs -r sed -i "s/$guid/$const/g"
+              done
 
       - name: Normalize timestamps
         working-directory: /tmp/workdir
