@@ -796,6 +796,9 @@ class LocalEnsemble(BaseMode):
         if isinstance(dataset, pl.DataFrame):
             if dataset.is_empty():
                 raise ValueError("Parameters dataframe is empty.")
+
+            print(f"DEBUG save_parameters DataFrame input:\n{dataset.with_columns(pl.all().cast(pl.Utf8))}")
+
             allowed_cols = set(self.experiment.parameter_configuration) | {
                 "realization"
             }
@@ -826,6 +829,7 @@ class LocalEnsemble(BaseMode):
                     .unique(subset=["realization"], keep="first")
                     .sort("realization")
                 )
+                print(f"DEBUG save_parameters DataFrame final (before write):\n{df_full.with_columns(pl.all().cast(pl.Utf8))}")
             except KeyError:
                 df_full = dataset
 
@@ -845,6 +849,7 @@ class LocalEnsemble(BaseMode):
                 f"Dataset for parameter group '{group}' "
                 "must contain a 'values' variable"
             )
+        print(f"DEBUG save_parameters xarray input for group={group}, realization={realization}:\n{dataset['values'].values}")
         if dataset["values"].size == 0:
             raise ValueError(
                 f"Parameters {group} are empty. Cannot proceed with saving to storage."
@@ -856,6 +861,7 @@ class LocalEnsemble(BaseMode):
             data_to_save = dataset.sel(realizations=[realization])
         else:
             data_to_save = dataset.expand_dims(realizations=[realization])
+        print(f"DEBUG save_parameters xarray final (before write):\n{data_to_save['values'].values}")
         self._storage._to_netcdf_transaction(path, data_to_save)
 
     @require_write
