@@ -16,6 +16,10 @@ env:
   EXCLUDED_CONFIGS: |
     snake_oil/snake_oil_surface.ert
 
+  EXAMPLES_REQUIRING_FLOW: |
+    flow_example
+    rft_example
+
   EXCLUDED_STORAGE_PATHS: |
     **/*.log
     **/logs/**
@@ -36,18 +40,6 @@ jobs:
 
       - name: Sync environment
         run: uv sync --all-groups
-
-      - name: Install flow
-        run: |
-          set -e
-          sudo apt install software-properties-common
-          sudo apt-add-repository ppa:opm/ppa
-          sudo apt update
-          sudo apt install mpi-default-bin
-          sudo apt install libopm-simulators-bin python3-opm-common
-
-          which flow
-          flow --version
 
       - name: Find example configs
         id: find
@@ -82,6 +74,24 @@ jobs:
 
       - name: Sync environment
         run: uv sync --all-groups
+
+      - name: Check if flow is required
+        id: flow_check
+        run: |
+          if echo "$EXAMPLES_REQUIRING_FLOW" | grep -qx "${{ matrix.entry.example }}"; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "required=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install flow
+        if: steps.flow_check.outputs.required == 'true'
+        run: |
+          sudo apt install software-properties-common
+          sudo apt-add-repository ppa:opm/ppa
+          sudo apt update
+          sudo apt install mpi-default-bin
+          sudo apt install libopm-simulators-bin python3-opm-common
 
       - name: Copy example to workdir
         run: cp -r "test-data/ert/${{ matrix.entry.example }}" /tmp/workdir
