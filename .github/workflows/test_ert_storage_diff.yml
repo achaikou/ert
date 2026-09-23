@@ -374,11 +374,24 @@ jobs:
           name: raw-storage-main-${{ matrix.entry.example }}-${{ matrix.entry.config }}
           path: /tmp/workdir/storage
 
-      - name: Run ert on main storage with PR code
-        id: run_ert
-        continue-on-error: true
+      - name: Determine prior ensemble id
+        id: prior_ensemble
         working-directory: /tmp/workdir
-        run: uv run --project "$GITHUB_WORKSPACE" ert ensemble_smoother "${{ matrix.entry.config }}"
+        run: |
+          prior_id=$(find storage/ensembles -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
+            | sort -n \
+            | head -n1 \
+            | awk '{print $2}' \
+            | xargs -n1 basename)
+          echo "id=$prior_id" >> "$GITHUB_OUTPUT"
+
+      - name: Run ert es_mda on main storage with PR code
+        working-directory: /tmp/workdir
+        run: |
+          uv run --project "$GITHUB_WORKSPACE" ert es_mda \
+            --prior-ensemble-id "${{ steps.prior_ensemble.outputs.id }}" \
+            --weights 1 \
+            "${{ matrix.entry.config }}"
 
       - name: Print storage tree
         if: always()
