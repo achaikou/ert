@@ -422,7 +422,7 @@ jobs:
           overall_status="pass"
           : > /tmp/final-report.md
 
-          echo "$EXAMPLES_JSON" | jq -c '.[]' | while read -r entry; do
+          while read -r entry; do
             example=$(echo "$entry" | jq -r '.example')
             config=$(echo "$entry" | jq -r '.config')
 
@@ -451,7 +451,7 @@ jobs:
               cat "/tmp/compare-results/compare-result-$example-$config/report.md"
               echo ""
             } >> /tmp/final-report.md
-          done
+          done < <(echo "$EXAMPLES_JSON" | jq -c '.[]')
 
           if [ "$overall_status" = "pass" ]; then
             header="# ✅ No storage changes"
