@@ -232,8 +232,7 @@ jobs:
 
       - name: Start report
         run: |
-          echo "## ${{ matrix.example }}" > /tmp/report.md
-          echo "" >> /tmp/report.md
+          : > /tmp/report.md
           echo "<details><summary>Details</summary>" >> /tmp/report.md
           echo "" >> /tmp/report.md
 
@@ -245,8 +244,10 @@ jobs:
             in_main=$(grep -qx "$f" /tmp/main-files.txt && echo yes || echo no)
             if [ "$in_pr" = "no" ]; then
               echo "- $f (missing from PR run)" >> /tmp/report.md
+              echo "fail" >> /tmp/example-status.txt
             elif [ "$in_main" = "no" ]; then
               echo "- $f (missing from main run)" >> /tmp/report.md
+              echo "fail" >> /tmp/example-status.txt
             fi
           done < /tmp/files.txt
           echo "" >> /tmp/report.md
@@ -264,6 +265,7 @@ jobs:
               continue
             fi
 
+            echo "fail" >> /tmp/example-status.txt
             {
               echo "<details><summary>$f</summary>"
               echo ""
@@ -289,8 +291,22 @@ jobs:
           done < /tmp/files.txt
           echo "</details>" >> /tmp/report.md
 
-      - name: Add report to summary
-        run: cat /tmp/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Determine example status
+        run: |
+          mkdir -p /tmp/compare-result
+          if [ -s /tmp/example-status.txt ]; then
+            echo "fail" > /tmp/compare-result/status.txt
+          else
+            echo "pass" > /tmp/compare-result/status.txt
+          fi
+          cp /tmp/report.md /tmp/compare-result/report.md
+
+      - name: Upload compare result
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: compare-result-${{ matrix.entry.example }}-${{ matrix.entry.config }}
+          path: /tmp/compare-result
+          retention-days: 7
 
   check-storage-backward-compatibility:
     needs: [run-examples, run-example]
@@ -338,6 +354,8 @@ jobs:
           path: /tmp/workdir/storage
 
       - name: Run ert on main storage with PR code
+        id: run_ert
+        continue-on-error: true
         working-directory: /tmp/workdir
         run: uv run --project "$GITHUB_WORKSPACE" ert ensemble_smoother "${{ matrix.entry.config }}"
 
@@ -345,3 +363,80 @@ jobs:
         if: always()
         working-directory: /tmp/workdir
         run: find storage | sort
+
+      - name: Write compatibility status
+        run: |
+          mkdir -p /tmp/compat-result
+          echo "${{ steps.run_ert.outcome }}" > /tmp/compat-result/status.txt
+
+      - name: Upload compatibility status
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: compat-status-${{ matrix.entry.example }}-${{ matrix.entry.config }}
+          path: /tmp/compat-result/status.txt
+          retention-days: 7
+
+  report:
+    needs: [run-examples, compare, check-storage-backward-compatibility]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download compare results
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: compare-result-*
+          path: /tmp/compare-results
+          merge-multiple: false
+
+      - name: Download compatibility statuses
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: compat-status-*
+          path: /tmp/compat-statuses
+          merge-multiple: false
+
+      - name: Build report
+        env:
+          EXAMPLES_JSON: ${{ needs.run-examples.outputs.examples }}
+        run: |
+          overall_status="pass"
+          : > /tmp/final-report.md
+
+          echo "$EXAMPLES_JSON" | jq -c '.[]' | while read -r entry; do
+            example=$(echo "$entry" | jq -r '.example')
+            config=$(echo "$entry" | jq -r '.config')
+
+            compat_status=$(cat "/tmp/compat-statuses/compat-status-$example-$config/status.txt")
+            compare_status=$(cat "/tmp/compare-results/compare-result-$example-$config/status.txt")
+
+            if [ "$compat_status" = "success" ]; then
+              compat_line="✅ Old storage opens on the branch"
+            else
+              compat_line="❌ Old storage failed to open on the branch"
+              overall_status="fail"
+            fi
+
+            if [ "$compare_status" = "pass" ]; then
+              example_emoji="✅"
+            else
+              example_emoji="⚠️"
+              overall_status="fail"
+            fi
+
+            {
+              echo "## $example_emoji $example ($config)"
+              echo ""
+              echo "$compat_line"
+              echo ""
+              cat "/tmp/compare-results/compare-result-$example-$config/report.md"
+              echo ""
+            } >> /tmp/final-report.md
+          done
+
+          if [ "$overall_status" = "pass" ]; then
+            header="# ✅ No storage changes"
+          else
+            header="# ⚠️ Storage changes observed"
+          fi
+
+          { echo "$header"; echo ""; cat /tmp/final-report.md; } > /tmp/summary.md
+          cat /tmp/summary.md >> "$GITHUB_STEP_SUMMARY"
