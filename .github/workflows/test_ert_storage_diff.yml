@@ -398,6 +398,16 @@ jobs:
         working-directory: /tmp/workdir
         run: find storage | sort
 
+      - name: Print logs
+        if: always()
+        working-directory: /tmp/workdir
+        run: |
+          for f in logs/*; do
+            echo "::group::$f"
+            cat "$f"
+            echo "::endgroup::"
+          done
+
       - name: Write compatibility status
         run: |
           mkdir -p /tmp/compat-result
