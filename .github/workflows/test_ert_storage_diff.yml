@@ -163,6 +163,9 @@ jobs:
                 echo "$name $const" >> /tmp/guid-mapping.txt
               done
 
+      - name: Print normalization mapping
+        run: cat /tmp/guid-mapping.txt
+
       - name: Apply normalization mapping
         working-directory: /tmp/workdir
         run: |
