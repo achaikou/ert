@@ -196,6 +196,14 @@ jobs:
         entry: ${{ fromJson(needs.run-examples.outputs.examples) }}
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Install polars
+        run: uv pip install --system polars
+
       - name: Download PR storage
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -245,6 +253,12 @@ jobs:
             grep -qx "$f" /tmp/pr-files.txt || continue
             grep -qx "$f" /tmp/main-files.txt || continue
             diff -q "/tmp/pr-storage/$f" "/tmp/main-storage/$f" > /dev/null 2>&1 && continue
+
+            if uv run --no-project python "$GITHUB_WORKSPACE/.github/scripts/compare_storage_file.py" \
+              "/tmp/pr-storage/$f" "/tmp/main-storage/$f"; then
+              continue
+            fi
+
             {
               echo "<details><summary>$f</summary>"
               echo ""
@@ -262,8 +276,11 @@ jobs:
           while read -r f; do
             grep -qx "$f" /tmp/pr-files.txt || continue
             grep -qx "$f" /tmp/main-files.txt || continue
-            diff -q "/tmp/pr-storage/$f" "/tmp/main-storage/$f" > /dev/null 2>&1 || continue
-            echo "- $f" >> /tmp/report.md
+            diff -q "/tmp/pr-storage/$f" "/tmp/main-storage/$f" > /dev/null 2>&1 && \
+              { echo "- $f" >> /tmp/report.md; continue; }
+
+            uv run --no-project python "$GITHUB_WORKSPACE/.github/scripts/compare_storage_file.py" \
+              "/tmp/pr-storage/$f" "/tmp/main-storage/$f" && echo "- $f (float-tolerant match)" >> /tmp/report.md
           done < /tmp/files.txt
           echo "</details>" >> /tmp/report.md
 
