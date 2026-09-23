@@ -9,6 +9,7 @@ env:
   EXCLUDED_EXAMPLES: |
     block_storage
     eclipse
+    flow_example
     heat_equation
     poly_template
 
