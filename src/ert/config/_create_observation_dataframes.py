@@ -182,6 +182,7 @@ def _rft_observation_schema() -> dict[str, Any]:
         "tvd": pl.Float32,
         "md": pl.Float32,
         "zone": pl.String,
+        "cat": pl.String,
     }
 
 
@@ -217,6 +218,7 @@ def _handle_rft_observation(
             "tvd": pl.Series([rft_observation.tvd], dtype=pl.Float32),
             "md": pl.Series([rft_observation.md], dtype=pl.Float32),
             "zone": pl.Series([rft_observation.zone], dtype=pl.String),
+            "cat": pl.Series([rft_observation.cat], dtype=pl.String),
             "observations": pl.Series([rft_observation.value], dtype=pl.Float32),
             "std": pl.Series([rft_observation.error], dtype=pl.Float32),
             "radius": pl.Series([localization_radius], dtype=pl.Float32),

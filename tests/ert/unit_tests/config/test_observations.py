@@ -355,6 +355,7 @@ def test_that_rft_observation_dataframes_are_created():
                 "observations": pl.Series([700.0], dtype=pl.Float32),
                 "std": pl.Series([0.1], dtype=pl.Float32),
                 "radius": pl.Series([DEFAULT_LOCALIZATION_RADIUS], dtype=pl.Float32),
+                "cat": pl.Series(["Pumpkin"], dtype=pl.String),
             }
         ),
     )

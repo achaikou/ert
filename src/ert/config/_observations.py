@@ -643,6 +643,7 @@ class RFTObservation(BaseObservation):
     tvd: float
     md: float | None = None
     zone: str | None = None
+    cat: str | None = "Pumpkin"
 
     @classmethod
     def from_csv(

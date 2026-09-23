@@ -1038,6 +1038,7 @@ class LocalEnsemble(BaseMode):
             for real in reals:
                 observations = ensure_qc_error_column(observations_for_type)
                 if response_type == "rft":
+                    print(observations.select("cat"))
                     observations = self.add_rft_metadata_and_qc(observations, real)
 
                 observed_cols = {
