@@ -12,7 +12,6 @@ env:
     flow_example
     heat_equation
     poly_template
-    snake_oil
 
   EXCLUDED_CONFIGS: |
     snake_oil/snake_oil_surface.ert
