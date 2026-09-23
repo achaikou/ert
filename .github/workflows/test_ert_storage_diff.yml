@@ -456,7 +456,10 @@ jobs:
           if [ "$overall_status" = "pass" ]; then
             header="# ✅ No storage changes"
           else
-            header="# ⚠️ Storage changes observed"
+            header=$(printf '%s\n\n%s\n%s' \
+              "# ⚠️ Storage changes observed" \
+              "- If storage changes were not intended, consider reverting them." \
+              "- If storage changes were intended, make sure they will not affect users or add a new storage migration.")
           fi
 
           { echo "$header"; echo ""; cat /tmp/final-report.md; } > /tmp/summary.md
