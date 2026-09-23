@@ -277,7 +277,7 @@ class RFTConfig(SimulationResponseConfig):
             "date": pl.String,
             "property": pl.String,
             "time": pl.Date,
-            "depth": pl.Int64,
+            "depth": pl.Float32,
             "values": pl.Float32,
             "well_connection_cell": pl.Array(pl.Int64, 3),
             "cell_center": pl.Array(pl.Float32, 3),
