@@ -403,11 +403,13 @@ jobs:
         id: prior_ensemble
         working-directory: /tmp/workdir
         run: |
-          prior_id=$(find storage/ensembles -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
-            | sort -n \
-            | head -n1 \
-            | awk '{print $2}' \
-            | xargs -n1 basename)
+          prior_id=$(for index_file in storage/ensembles/*/index.json; do
+            iteration=$(jq -r '.iteration' "$index_file")
+            if [ "$iteration" = "0" ]; then
+              jq -r '.id' "$index_file"
+              break
+            fi
+          done)
           echo "id=$prior_id" >> "$GITHUB_OUTPUT"
 
       - name: Run ert es_mda on main storage with PR code
