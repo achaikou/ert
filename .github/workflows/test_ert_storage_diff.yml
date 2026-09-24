@@ -368,6 +368,23 @@ jobs:
       - name: Copy example to workdir
         run: cp -r "test-data/ert/${{ matrix.entry.example }}" /tmp/workdir
 
+      - name: Pin NUM_REALIZATIONS and RANDOM_SEED
+        working-directory: /tmp/workdir
+        run: |
+          ert_file="${{ matrix.entry.config }}"
+
+          if grep -q "^NUM_REALIZATIONS" "$ert_file"; then
+            sed -i "s/^NUM_REALIZATIONS.*/NUM_REALIZATIONS 2/" "$ert_file"
+          else
+            echo "NUM_REALIZATIONS 2" >> "$ert_file"
+          fi
+
+          if grep -q "^RANDOM_SEED" "$ert_file"; then
+            sed -i "s/^RANDOM_SEED.*/RANDOM_SEED 1234/" "$ert_file"
+          else
+            echo "RANDOM_SEED 1234" >> "$ert_file"
+          fi
+
       - name: Reset ENSPATH and RUNPATH to defaults
         working-directory: /tmp/workdir
         run: |
