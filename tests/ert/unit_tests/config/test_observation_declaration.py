@@ -858,7 +858,7 @@ def test_that_seismic_observation_instantiates(file_context_token):
             north=5933317.28138355,
             value=-0.0005293887515127136,
             error=0.005,
-            shape_id=1,
+            shape_id=0,
             boundary_id=None,
         ),
     ]
@@ -1071,7 +1071,7 @@ def test_that_seismic_observation_defaults_all_names_to_filename(file_context_to
             north=2.0,
             value=1.0,
             error=0.005,
-            shape_id=1,
+            shape_id=0,
             boundary_id=None,
         ),
     ]
