@@ -278,6 +278,7 @@ def _handle_seismic_observation(
     if shape_registry is not None:
         shape = seismic_observation.shape(shape_registry)
         if shape is not None and isinstance(shape, CircleShapeConfig):
+            assert not shape.is_absolute()
             radius = shape.radius
     boundary_id = seismic_observation.boundary_id
 
