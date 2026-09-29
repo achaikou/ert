@@ -61,6 +61,7 @@ jobs:
   run-example:
     needs: run-examples
     strategy:
+      fail-fast: false
       matrix:
         ref: [pr, main]
         entry: ${{ fromJson(needs.run-examples.outputs.examples) }}
@@ -121,11 +122,13 @@ jobs:
           sed -i "/^ENSPATH/d;/^RUNPATH/d" "$ert_file"
 
       - name: Run ert ensemble_smoother
+        id: run_ert
+        continue-on-error: true
         working-directory: /tmp/workdir
         run: uv run --project "$GITHUB_WORKSPACE" ert ensemble_smoother "${{ matrix.entry.config }}"
 
       - name: Upload raw main storage
-        if: matrix.ref == 'main'
+        if: always() && matrix.ref == 'main'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: raw-storage-main-${{ matrix.entry.example }}-${{ matrix.entry.config }}
@@ -133,6 +136,7 @@ jobs:
           retention-days: 7
 
       - name: Determine normalization mapping
+        if: steps.run_ert.outcome == 'success'
         working-directory: /tmp/workdir
         run: |
           : > /tmp/guid-mapping.txt
@@ -164,9 +168,11 @@ jobs:
               done
 
       - name: Print normalization mapping
+        if: steps.run_ert.outcome == 'success'
         run: cat /tmp/guid-mapping.txt
 
       - name: Apply normalization mapping
+        if: steps.run_ert.outcome == 'success'
         working-directory: /tmp/workdir
         run: |
           while read -r old new; do
@@ -176,6 +182,7 @@ jobs:
           done < /tmp/guid-mapping.txt
 
       - name: Normalize timestamps
+        if: steps.run_ert.outcome == 'success'
         working-directory: /tmp/workdir
         run: |
           pattern='[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z?'
@@ -193,6 +200,7 @@ jobs:
 
 
       - name: Upload storage
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: storage-${{ matrix.ref }}-${{ matrix.entry.example }}-${{ matrix.entry.config }}
@@ -201,7 +209,9 @@ jobs:
 
   compare:
     needs: [run-examples, run-example]
+    if: always()
     strategy:
+      fail-fast: false
       matrix:
         entry: ${{ fromJson(needs.run-examples.outputs.examples) }}
     runs-on: ubuntu-latest
@@ -212,12 +222,16 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Download PR storage
+        id: download_pr
+        continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: storage-pr-${{ matrix.entry.example }}-${{ matrix.entry.config }}
           path: /tmp/pr-storage
 
       - name: Download main storage
+        id: download_main
+        continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: storage-main-${{ matrix.entry.example }}-${{ matrix.entry.config }}
@@ -225,6 +239,7 @@ jobs:
 
       - name: List files
         id: list
+        if: steps.download_pr.outcome == 'success' && steps.download_main.outcome == 'success'
         run: |
           cd /tmp/pr-storage
           find . -type f | sed 's|^\./||' > /tmp/pr-files-all.txt
@@ -252,12 +267,14 @@ jobs:
           grep -Fxf /tmp/files.txt /tmp/main-files-all.txt > /tmp/main-files.txt || true
 
       - name: Start report
+        if: steps.list.outcome == 'success'
         run: |
           : > /tmp/report.md
           echo "<details><summary>Details</summary>" >> /tmp/report.md
           echo "" >> /tmp/report.md
 
       - name: Report missing files
+        if: steps.list.outcome == 'success'
         run: |
           echo "### Missing files" >> /tmp/report.md
           while read -r f; do
@@ -274,6 +291,7 @@ jobs:
           echo "" >> /tmp/report.md
 
       - name: Report failed files
+        if: steps.list.outcome == 'success'
         run: |
           echo "### Failed files" >> /tmp/report.md
           while read -r f; do
@@ -300,6 +318,7 @@ jobs:
           echo "" >> /tmp/report.md
 
       - name: Report passed files
+        if: steps.list.outcome == 'success'
         run: |
           echo "### Passed files" >> /tmp/report.md
           while read -r f; do
@@ -317,12 +336,16 @@ jobs:
         if: always()
         run: |
           mkdir -p /tmp/compare-result
-          if [ -s /tmp/example-status.txt ]; then
+          if [ ! -f /tmp/report.md ]; then
             echo "fail" > /tmp/compare-result/status.txt
+            echo "_Storage artifacts were unavailable for this example (upstream run may have failed)._" > /tmp/compare-result/report.md
+          elif [ -s /tmp/example-status.txt ]; then
+            echo "fail" > /tmp/compare-result/status.txt
+            cp /tmp/report.md /tmp/compare-result/report.md
           else
             echo "pass" > /tmp/compare-result/status.txt
+            cp /tmp/report.md /tmp/compare-result/report.md
           fi
-          cp /tmp/report.md /tmp/compare-result/report.md 2>/dev/null || echo "Report generation failed" > /tmp/compare-result/report.md
 
       - name: Upload compare result
         if: always()
@@ -334,6 +357,7 @@ jobs:
 
   check-storage-backward-compatibility:
     needs: [run-examples, run-example]
+    if: always()
     strategy:
       matrix:
         entry: ${{ fromJson(needs.run-examples.outputs.examples) }}
@@ -395,6 +419,8 @@ jobs:
           sed -i "/^ENSPATH/d;/^RUNPATH/d" "$ert_file"
 
       - name: Download raw main storage
+        id: download_raw
+        continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: raw-storage-main-${{ matrix.entry.example }}-${{ matrix.entry.config }}
@@ -402,6 +428,7 @@ jobs:
 
       - name: Determine prior ensemble id
         id: prior_ensemble
+        if: steps.download_raw.outcome == 'success'
         working-directory: /tmp/workdir
         run: |
           prior_id=$(for index_file in storage/ensembles/*/index.json; do
@@ -415,10 +442,10 @@ jobs:
 
       - name: Run ert es_mda on main storage with PR code
         id: run_ert
+        if: steps.download_raw.outcome == 'success'
         continue-on-error: true
         working-directory: /tmp/workdir
-        run: |
-          uv run --project "$GITHUB_WORKSPACE" ert es_mda \
+        run: uv run --project "$GITHUB_WORKSPACE" ert es_mda \
             --prior-ensemble-id "${{ steps.prior_ensemble.outputs.id }}" \
             --weights 1 \
             "${{ matrix.entry.config }}"
@@ -442,7 +469,11 @@ jobs:
         if: always()
         run: |
           mkdir -p /tmp/compat-result
-          echo "${{ steps.run_ert.outcome }}" > /tmp/compat-result/status.txt
+          if [ "${{ steps.download_raw.outcome }}" != "success" ]; then
+            echo "missing" > /tmp/compat-result/status.txt
+          else
+            echo "${{ steps.run_ert.outcome }}" > /tmp/compat-result/status.txt
+          fi
 
       - name: Upload compatibility status
         if: always()
