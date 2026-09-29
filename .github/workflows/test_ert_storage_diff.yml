@@ -291,7 +291,8 @@ jobs:
               echo "<details><summary>$f</summary>"
               echo ""
               echo '```diff'
-              diff -ru "/tmp/main-storage/$f" "/tmp/pr-storage/$f" || true
+              diff -ru "/tmp/main-storage/$f" "/tmp/pr-storage/$f" 2>&1 | head -n 100
+              echo '... (diff truncated) ...'
               echo '```'
               echo "</details>"
             } >> /tmp/report.md
@@ -534,4 +535,13 @@ jobs:
           fi
 
           { echo "$header"; echo ""; cat /tmp/final-report.md; } > /tmp/summary.md
+
+          max_bytes=$((1000 * 1024))
+          if [ "$(stat -c%s /tmp/summary.md)" -gt "$max_bytes" ]; then
+            head -c "$max_bytes" /tmp/summary.md > /tmp/summary-truncated.md
+            echo "" >> /tmp/summary-truncated.md
+            echo "_Report truncated because it exceeded the GitHub summary size limit. See workflow artifacts for full details._" >> /tmp/summary-truncated.md
+            mv /tmp/summary-truncated.md /tmp/summary.md
+          fi
+
           cat /tmp/summary.md >> "$GITHUB_STEP_SUMMARY"
