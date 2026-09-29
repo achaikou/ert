@@ -307,6 +307,15 @@ jobs:
             fi
 
             echo "fail" >> /tmp/example-status.txt
+
+            if ! diff -q "/tmp/pr-storage/$f" "/tmp/main-storage/$f" > /dev/null 2>&1 && \
+               file "/tmp/pr-storage/$f" | grep -qv text; then
+              echo "::group::Binary diff summary: $f"
+              uv run --with polars python "$GITHUB_WORKSPACE/.github/scripts/describe_storage_diff.py" \
+                "/tmp/pr-storage/$f" "/tmp/main-storage/$f" || true
+              echo "::endgroup::"
+            fi
+
             diff_output=$(diff -ru "/tmp/main-storage/$f" "/tmp/pr-storage/$f" 2>&1)
             diff_lines=$(echo "$diff_output" | wc -l)
             {
