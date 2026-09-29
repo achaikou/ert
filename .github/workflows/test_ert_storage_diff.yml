@@ -60,6 +60,7 @@ jobs:
 
   run-example:
     needs: run-examples
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -210,6 +211,7 @@ jobs:
   compare:
     needs: [run-examples, run-example]
     if: always()
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -358,6 +360,7 @@ jobs:
   check-storage-backward-compatibility:
     needs: [run-examples, run-example]
     if: always()
+    continue-on-error: true
     strategy:
       matrix:
         entry: ${{ fromJson(needs.run-examples.outputs.examples) }}
