@@ -308,15 +308,15 @@ jobs:
 
             echo "fail" >> /tmp/example-status.txt
 
-            if ! diff -q "/tmp/pr-storage/$f" "/tmp/main-storage/$f" > /dev/null 2>&1 && \
-               file "/tmp/pr-storage/$f" | grep -qv text; then
+            is_text=$(file -b --mime "/tmp/pr-storage/$f" | grep -c "charset=us-ascii\|charset=utf-8" || true)
+            if [ "$is_text" -eq 0 ] && [ -f "$GITHUB_WORKSPACE/.github/scripts/describe_storage_diff.py" ]; then
               echo "::group::Binary diff summary: $f"
               uv run --with polars python "$GITHUB_WORKSPACE/.github/scripts/describe_storage_diff.py" \
                 "/tmp/pr-storage/$f" "/tmp/main-storage/$f" || true
               echo "::endgroup::"
             fi
 
-            diff_output=$(diff -ru "/tmp/main-storage/$f" "/tmp/pr-storage/$f" 2>&1)
+            diff_output=$(diff -ru "/tmp/main-storage/$f" "/tmp/pr-storage/$f" 2>&1 || true)
             diff_lines=$(echo "$diff_output" | wc -l)
             {
               echo "<details><summary>$f</summary>"
