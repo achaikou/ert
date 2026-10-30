@@ -7,7 +7,7 @@ from typing import Any, Literal, Self
 import numpy as np
 import polars as pl
 
-from ert.config._reservoir_data_utils import SeismicData
+from ert.config._reservoir_data import SeismicData
 
 from .parsing import (
     ConfigDict,

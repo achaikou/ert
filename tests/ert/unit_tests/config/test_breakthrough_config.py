@@ -61,7 +61,7 @@ class BreakthroughData:
                 "values": [None] * count if values is None else values,
             },
             schema=self.breakthrough_config.response_schema(),
-        ).lazy()
+        ).with_columns(pl.col("response_key").cast(pl.Categorical)).lazy()
 
 
 @dataclass

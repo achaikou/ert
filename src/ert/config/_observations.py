@@ -23,7 +23,7 @@ from resfo_utilities import InvalidSummaryKeyError, make_summary_key
 
 from ert.validation import rangestring_to_list
 
-from ._reservoir_data_utils import SeismicData
+from ._reservoir_data import SeismicData
 from ._shapes import CircleShapeConfig, PolygonShapeConfig, ShapeConfig, ShapeRegistry
 from .parsing import (
     ConfigWarning,

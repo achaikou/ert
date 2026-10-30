@@ -27,7 +27,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from ert.config._reservoir_data_utils import SeismicData
+from ert.config._reservoir_data import SeismicData
 from ert.config.response_config import ResponseConfig
 from ert.config.rft_config import RFTConfig
 from ert.gui.experiments.view.run_status import RunStatusView

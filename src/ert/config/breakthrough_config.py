@@ -104,7 +104,7 @@ class BreakthroughConfig(DerivedResponseConfig):
                 "threshold": self.thresholds,
                 "obs_date": self.observed_dates,
             }
-        )
+        ).with_columns(pl.col("response_key").cast(pl.Categorical))
 
         day_after_end_date = pl.lit(ensemble_end_date) + pl.duration(days=1)
         offset_days = (day_after_end_date - pl.col("obs_date")).dt.total_seconds() / (
