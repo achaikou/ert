@@ -291,6 +291,9 @@ class PlotApi:
         except (ParserError, ValueError):
             try:
                 df.columns = [int(s) for s in df.columns]
+                raise RuntimeError(
+                    "Failed to parse column names as datetime or integer"
+                )
             except ValueError:
                 try:
                     df.columns = [float(s) for s in df.columns]
@@ -444,6 +447,9 @@ class PlotApi:
                 try:
                     int(obs["x_axis"][0])
                     key_index = [int(v) for v in obs["x_axis"]]
+                    raise RuntimeError(
+                        "Failed to parse x_axis values as integers"
+                    )
                 except ValueError:
                     try:
                         key_index = [pd.Timestamp(v) for v in obs["x_axis"]]
